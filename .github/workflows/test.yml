@@ -39,7 +39,7 @@ jobs:
         run: |
           uv pip install "homeassistant==${{ matrix.ha-version }}"
       - run: uv run pytest --cov=custom_components/caffeine_tracker --cov-report=xml
-      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
+      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         if: matrix.ha-version == 'stable'
         with:
           files: ./coverage.xml
