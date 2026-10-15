@@ -30,6 +30,7 @@ from .const import (
     MAX_HALF_LIFE_HOURS,
     MIN_ABSORPTION_TIME_MIN,
     MIN_HALF_LIFE_HOURS,
+    MIN_SLEEP_SAFE_MG,
 )
 
 
@@ -56,9 +57,9 @@ def _settings_schema(
                 CONF_SLEEP_SAFE_MG, default=default_sleep_safe
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=0,
+                    min=MIN_SLEEP_SAFE_MG,
                     max=500,
-                    step=5,
+                    step=1,
                     mode=selector.NumberSelectorMode.BOX,
                     unit_of_measurement="mg",
                 )
@@ -120,11 +121,16 @@ class CaffeineTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> CaffeineTrackerOptionsFlow:
-        return CaffeineTrackerOptionsFlow()
+        return CaffeineTrackerOptionsFlow(config_entry)
 
 
 class CaffeineTrackerOptionsFlow(config_entries.OptionsFlow):
     """Handle options (re-configuration) for an existing entry."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        # HA < 2024.11 doesn't set self.config_entry on options flows, and assigning
+        # it is deprecated in newer HA (breaks in 2025.12), so keep our own reference.
+        self._entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -133,9 +139,7 @@ class CaffeineTrackerOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(data=user_input)
 
         def _get(key: str, default: float | bool) -> float | bool:
-            return self.config_entry.options.get(
-                key, self.config_entry.data.get(key, default)
-            )
+            return self._entry.options.get(key, self._entry.data.get(key, default))
 
         current_half_life = float(_get(CONF_HALF_LIFE_HOURS, DEFAULT_HALF_LIFE_HOURS))
         current_sleep_safe = float(_get(CONF_SLEEP_SAFE_MG, DEFAULT_SLEEP_SAFE_MG))

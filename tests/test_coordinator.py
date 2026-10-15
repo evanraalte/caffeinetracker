@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta, timezone
 import math
 
+import homeassistant.util.dt as dt_util
 import pytest
 
 from custom_components.caffeine_tracker.coordinator import (
@@ -12,7 +13,9 @@ from custom_components.caffeine_tracker.coordinator import (
     compute_consumed_today_mg,
     compute_current_mg,
     compute_peak_mg,
+    compute_prune_cutoff,
     compute_sleep_safe_at,
+    compute_sleep_safe_at_absorbing,
     local_midnight_utc,
 )
 
@@ -161,6 +164,12 @@ class TestComputeSleepSafeAt:
         result = compute_sleep_safe_at(50.0, 5.0, 50.0, now)
         assert result is None
 
+    def test_zero_threshold_does_not_divide_by_zero(self):
+        now = datetime.now(UTC)
+        # Older entries may store 0 mg; it's clamped to 1 mg instead of crashing.
+        result = compute_sleep_safe_at(80.0, 5.0, 0.0, now)
+        assert result == compute_sleep_safe_at(80.0, 5.0, 1.0, now)
+
     def test_one_half_life_from_threshold(self):
         now = datetime.now(UTC)
         # 100 mg → 50 mg takes exactly 1 half-life (5 h)
@@ -240,3 +249,75 @@ class TestCaffeineEventSerialization:
         }
         event = CaffeineEvent.from_dict(data)
         assert event.timestamp.tzinfo is not None
+
+
+# ---------------------------------------------------------------------------
+# compute_sleep_safe_at_absorbing
+# ---------------------------------------------------------------------------
+
+
+def _brute_force_safe_at(events, half_life, absorption, threshold, now):
+    """Last time the level is above threshold, in 10 s steps over 48 h."""
+    last_above = None
+    for step in range(48 * 360):
+        t = now + timedelta(seconds=10 * step)
+        if compute_current_mg(events, half_life, t, absorption) > threshold:
+            last_above = t
+    return last_above
+
+
+class TestComputeSleepSafeAtAbsorbing:
+    def test_fresh_drink_matches_simulation(self):
+        now = datetime(2026, 4, 20, 14, 0, tzinfo=UTC)
+        events = [CaffeineEvent(id="a", timestamp=now, mg=200, label="t")]
+        result = compute_sleep_safe_at_absorbing(events, 5.0, 15.0, 50.0, now)
+        expected = _brute_force_safe_at(events, 5.0, 15.0, 50.0, now)
+        assert result is not None and expected is not None
+        assert abs((result - expected).total_seconds()) < 120
+
+    def test_level_rising_above_threshold_later(self):
+        now = datetime(2026, 4, 20, 14, 0, tzinfo=UTC)
+        # Just drunk: level is ~0 now but will rise well above 50 mg.
+        events = [CaffeineEvent(id="a", timestamp=now, mg=100, label="t")]
+        result = compute_sleep_safe_at_absorbing(events, 5.0, 15.0, 50.0, now)
+        assert result is not None and result > now + timedelta(hours=4)
+
+    def test_already_absorbed_and_safe(self):
+        now = datetime(2026, 4, 20, 14, 0, tzinfo=UTC)
+        events = [
+            CaffeineEvent(
+                id="a", timestamp=now - timedelta(hours=10), mg=100, label="t"
+            )
+        ]
+        assert compute_sleep_safe_at_absorbing(events, 5.0, 15.0, 50.0, now) is None
+
+    def test_no_events(self):
+        now = datetime(2026, 4, 20, 14, 0, tzinfo=UTC)
+        assert compute_sleep_safe_at_absorbing([], 5.0, 15.0, 50.0, now) is None
+
+
+# ---------------------------------------------------------------------------
+# compute_prune_cutoff
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def utc_time_zone():
+    original = dt_util.get_default_time_zone()
+    dt_util.set_default_time_zone(UTC)
+    yield
+    dt_util.set_default_time_zone(original)
+
+
+@pytest.mark.usefixtures("utc_time_zone")
+class TestComputePruneCutoff:
+    def test_short_half_life_keeps_todays_events(self):
+        # 3 h half-life → 21 h of decay would cut off at 02:00, after midnight.
+        now = datetime(2026, 4, 20, 23, 0, tzinfo=UTC)
+        cutoff = compute_prune_cutoff(now, 3.0)
+        assert cutoff == datetime(2026, 4, 20, 0, 0, tzinfo=UTC)
+
+    def test_long_half_life_uses_decay_window(self):
+        now = datetime(2026, 4, 20, 23, 0, tzinfo=UTC)
+        cutoff = compute_prune_cutoff(now, 5.0)
+        assert cutoff == now - timedelta(hours=35)

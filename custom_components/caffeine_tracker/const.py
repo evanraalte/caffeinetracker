@@ -8,6 +8,8 @@ STORAGE_KEY_PREFIX = "caffeine_tracker"
 
 DEFAULT_HALF_LIFE_HOURS = 5.0
 DEFAULT_SLEEP_SAFE_MG = 50.0
+# Caffeine never decays to exactly 0 mg, so the threshold must be positive
+MIN_SLEEP_SAFE_MG = 1.0
 MIN_HALF_LIFE_HOURS = 3.0
 MAX_HALF_LIFE_HOURS = 10.0
 # Events older than this multiple of half-life contribute < 1% — safe to prune
