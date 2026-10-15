@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
 from homeassistant.helpers import selector
-import voluptuous as vol
+
+if TYPE_CHECKING:
+    import probatio as vol
+else:
+    try:  # HA 2026.10+ validates schemas with probatio
+        import probatio as vol
+    except ImportError:  # older HA
+        import voluptuous as vol
 
 from .const import (
     CONF_ABSORPTION_TIME_MIN,
