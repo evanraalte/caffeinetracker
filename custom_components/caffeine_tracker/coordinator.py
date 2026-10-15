@@ -20,6 +20,7 @@ from .const import (
     DEFAULT_SLEEP_SAFE_MG,
     DOMAIN,
     MAX_EVENT_AGE_MULTIPLIER,
+    MIN_SLEEP_SAFE_MG,
     STORAGE_KEY_PREFIX,
     STORAGE_VERSION,
 )
@@ -125,10 +126,49 @@ def compute_sleep_safe_at(
     now: datetime,
 ) -> datetime | None:
     """Return the future datetime when level crosses threshold, or None if already safe."""
-    if current_mg <= sleep_safe_mg:
+    threshold = max(sleep_safe_mg, MIN_SLEEP_SAFE_MG)
+    if current_mg <= threshold:
         return None
-    hours_needed = half_life_hours * math.log2(current_mg / sleep_safe_mg)
+    hours_needed = half_life_hours * math.log2(current_mg / threshold)
     return now + timedelta(hours=hours_needed)
+
+
+def compute_sleep_safe_at_absorbing(
+    events: list[CaffeineEvent],
+    half_life_hours: float,
+    absorption_time_min: float,
+    sleep_safe_mg: float,
+    now: datetime,
+) -> datetime | None:
+    """Like compute_sleep_safe_at, but for the absorption model.
+
+    While caffeine is still being absorbed the level can rise, so scan forward
+    minute by minute until every event is ≥99% absorbed (5 time constants). From
+    there the curve is plain exponential decay of the full dose.
+    """
+    threshold = max(sleep_safe_mg, MIN_SLEEP_SAFE_MG)
+    settle = timedelta(minutes=5 * absorption_time_min)
+    settled_at = max([now] + [e.timestamp + settle for e in events])
+
+    last_above: datetime | None = None
+    t = now
+    while t < settled_at:
+        level = compute_current_mg(events, half_life_hours, t, absorption_time_min)
+        if level > threshold:
+            last_above = t
+        t += timedelta(minutes=1)
+
+    settled_level = compute_current_mg(
+        events, half_life_hours, settled_at, absorption_time_min
+    )
+    if settled_level > threshold:
+        # Once absorbed, the curve is plain decay of the full dose, so the
+        # no-absorption formula gives the crossing time exactly.
+        fully_absorbed_mg = compute_current_mg(events, half_life_hours, now)
+        return compute_sleep_safe_at(fully_absorbed_mg, half_life_hours, threshold, now)
+    if last_above is None:
+        return None
+    return last_above + timedelta(minutes=1)
 
 
 def compute_consumed_today_mg(
@@ -150,6 +190,16 @@ def local_midnight_utc(now_utc: datetime) -> datetime:
     local_now = dt_util.as_local(now_utc)
     midnight_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     return dt_util.as_utc(midnight_local)
+
+
+def compute_prune_cutoff(now_utc: datetime, half_life_hours: float) -> datetime:
+    """Events at or before this time can be dropped.
+
+    Never later than local midnight, so the "consumed today" sensors keep every
+    event from today even when a short half-life would allow pruning it.
+    """
+    decayed = now_utc - timedelta(hours=MAX_EVENT_AGE_MULTIPLIER * half_life_hours)
+    return min(decayed, local_midnight_utc(now_utc))
 
 
 # ---------------------------------------------------------------------------
@@ -199,9 +249,7 @@ class CaffeineCoordinator(DataUpdateCoordinator[CaffeineData]):
         await self._store.async_save({"events": [e.to_dict() for e in self._events]})
 
     def _prune_old_events(self) -> None:
-        cutoff = dt_util.utcnow() - timedelta(
-            hours=MAX_EVENT_AGE_MULTIPLIER * self.half_life_hours
-        )
+        cutoff = compute_prune_cutoff(dt_util.utcnow(), self.half_life_hours)
         before = len(self._events)
         self._events = [e for e in self._events if e.timestamp > cutoff]
         pruned = before - len(self._events)
@@ -221,9 +269,13 @@ class CaffeineCoordinator(DataUpdateCoordinator[CaffeineData]):
             peak = compute_peak_mg(
                 self._events, self.half_life_hours, self.absorption_time_min, now
             )
-            # Use peak for sleep safety — level may still be rising
-            safe_at = compute_sleep_safe_at(
-                peak, self.half_life_hours, self.sleep_safe_mg, now
+            # Level may still be rising, so scan forward instead of decaying from now
+            safe_at = compute_sleep_safe_at_absorbing(
+                self._events,
+                self.half_life_hours,
+                self.absorption_time_min,
+                self.sleep_safe_mg,
+                now,
             )
         else:
             peak = None
