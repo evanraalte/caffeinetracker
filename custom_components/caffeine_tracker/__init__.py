@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+import inspect
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -47,6 +49,12 @@ PLATFORMS = [Platform.SENSOR]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+# Newer HA versions dropped the hass argument from async_extract_config_entry_ids.
+_extract_config_entry_ids: Callable[..., Awaitable[set[str]]] = (
+    service.async_extract_config_entry_ids
+)
+_EXTRACT_TAKES_HASS = "hass" in inspect.signature(_extract_config_entry_ids).parameters
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Caffeine Tracker integration."""
@@ -55,7 +63,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         """Handle the service call."""
         # This helper extracts unique config entry IDs from the target (entities or devices).
         # By iterating over entry IDs, we ensure the action fires exactly once per profile.
-        entry_ids = await service.async_extract_config_entry_ids(call)
+        extract_args: tuple[Any, ...] = (hass, call) if _EXTRACT_TAKES_HASS else (call,)
+        entry_ids = await _extract_config_entry_ids(*extract_args)
 
         for entry_id in entry_ids:
             if entry_id not in hass.data.get(DOMAIN, {}):
