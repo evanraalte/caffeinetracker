@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv, service
 import homeassistant.util.dt as dt_util
-import voluptuous as vol
+
+if TYPE_CHECKING:
+    import probatio as vol
+else:
+    try:  # HA 2026.10+ validates schemas with probatio
+        import probatio as vol
+    except ImportError:  # older HA
+        import voluptuous as vol
 
 from .const import (
     ATTR_EVENT_ID,

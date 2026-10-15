@@ -208,7 +208,9 @@ async def test_log_consumption_device_target_only_once(
 
     # Find the device ID for our config entry
     dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    device = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, entry.entry_id), entry.entry_id
+    )
     assert device is not None
 
     # Call service targeting the device
