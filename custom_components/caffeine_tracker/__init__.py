@@ -47,7 +47,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         """Handle the service call."""
         # This helper extracts unique config entry IDs from the target (entities or devices).
         # By iterating over entry IDs, we ensure the action fires exactly once per profile.
-        entry_ids = await service.async_extract_config_entry_ids(hass, call)  # type: ignore[call-arg]
+        entry_ids = await service.async_extract_config_entry_ids(call)
 
         for entry_id in entry_ids:
             if entry_id not in hass.data.get(DOMAIN, {}):
