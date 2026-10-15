@@ -1,6 +1,16 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.2.4] - 2026-10-15
+
+### Bug Fixes
+
+- Zero threshold crash, options flow on old HA, pruning and sleep-safe time
+
+### Documentation
+
+- Update test count in CLAUDE.md
+
 ## [0.2.3] - 2026-10-15
 
 ### Bug Fixes
