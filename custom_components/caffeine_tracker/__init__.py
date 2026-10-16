@@ -97,6 +97,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if call.service == SERVICE_LOG_CONSUMPTION:
             ts = _parse_timestamp(call.data.get(ATTR_TIMESTAMP))
 
+        removed_by_id = False
         for entry_id in entry_ids:
             if entry_id not in hass.data.get(DOMAIN, {}):
                 continue
@@ -113,10 +114,17 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 await coordinator.async_remove_last()
 
             elif call.service == SERVICE_REMOVE_BY_ID:
-                await coordinator.async_remove_by_id(call.data[ATTR_EVENT_ID])
+                if await coordinator.async_remove_by_id(call.data[ATTR_EVENT_ID]):
+                    removed_by_id = True
 
             elif call.service == SERVICE_CLEAR_TODAY:
                 await coordinator.async_clear_today()
+
+        # An event ID lives in one profile, so only fail if no targeted profile had it.
+        if call.service == SERVICE_REMOVE_BY_ID and not removed_by_id:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="event_not_found"
+            )
 
     # Register domain-level services once at setup.
     # make_entity_service_schema adds standard target fields (entity_id, device_id, etc.)
