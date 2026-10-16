@@ -70,6 +70,9 @@
     "invalid_timestamp": {
       "message": "Invalid timestamp. Use ISO 8601 format, e.g. 2024-06-01T08:30:00+02:00."
     },
+    "future_timestamp": {
+      "message": "Timestamp is in the future. Caffeine can only be logged for now or an earlier time."
+    },
     "event_not_found": {
       "message": "No event with the given ID was found."
     }

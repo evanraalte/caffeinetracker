@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+import homeassistant.util.dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -229,3 +231,178 @@ async def test_log_consumption_device_target_only_once(
     # If it fired 3 times, level would be 300. If once, 100.
     level = float(hass.states.get("sensor.erik_caffeine_level").state)
     assert level == 100.0
+
+
+async def _log(hass: HomeAssistant, data: dict) -> None:
+    await hass.services.async_call(
+        DOMAIN,
+        "log_consumption",
+        data,
+        target={"entity_id": "sensor.erik_caffeine_level"},
+        blocking=True,
+    )
+
+
+async def test_log_consumption_backdated_timestamp(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    """A timestamp one half-life ago with an explicit offset decays to half."""
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    five_hours_ago = (dt_util.utcnow() - timedelta(hours=5)).astimezone(
+        timezone(timedelta(hours=2))
+    )
+    await _log(hass, {"mg": 80.0, "timestamp": five_hours_ago.isoformat()})
+    await hass.async_block_till_done()
+
+    level = float(hass.states.get("sensor.erik_caffeine_level").state)
+    assert level == pytest.approx(40.0, abs=0.5)
+
+
+@pytest.mark.parametrize("timestamp", ["yesterday 8am", "08:30", "2026-13-01T08:00"])
+async def test_log_consumption_invalid_timestamp_rejected(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store, timestamp: str
+) -> None:
+    """An unparseable timestamp raises instead of silently logging at now."""
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    with pytest.raises(ServiceValidationError) as err:
+        await _log(hass, {"mg": 80.0, "timestamp": timestamp})
+    assert err.value.translation_key == "invalid_timestamp"
+    await hass.async_block_till_done()
+
+    assert int(hass.states.get("sensor.erik_consumptions_today").state) == 0
+
+
+async def test_log_consumption_future_timestamp_rejected(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    """A future timestamp raises instead of counting the full dose right away."""
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    in_an_hour = dt_util.utcnow() + timedelta(hours=1)
+    with pytest.raises(ServiceValidationError) as err:
+        await _log(hass, {"mg": 80.0, "timestamp": in_an_hour.isoformat()})
+    assert err.value.translation_key == "future_timestamp"
+    await hass.async_block_till_done()
+
+    assert float(hass.states.get("sensor.erik_caffeine_level").state) == 0.0
+
+
+async def test_remove_last_removes_last_logged_not_latest_timestamp(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    """Undo after backfilling an earlier drink removes the backfilled drink."""
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await _log(hass, {"mg": 100.0, "label": "now"})
+    one_hour_ago = dt_util.utcnow() - timedelta(hours=1)
+    await _log(
+        hass, {"mg": 50.0, "label": "backfill", "timestamp": one_hour_ago.isoformat()}
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "remove_last_consumption",
+        {},
+        target={"entity_id": "sensor.erik_caffeine_level"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    level = float(hass.states.get("sensor.erik_caffeine_level").state)
+    assert level == pytest.approx(100.0, abs=0.5)
+
+
+async def _remove_by_id(
+    hass: HomeAssistant, event_id: str, entity_ids: list[str]
+) -> None:
+    await hass.services.async_call(
+        DOMAIN,
+        "remove_consumption",
+        {"event_id": event_id},
+        target={"entity_id": entity_ids},
+        blocking=True,
+    )
+
+
+async def test_remove_consumption_by_id(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await _log(hass, {"mg": 80.0})
+    await hass.async_block_till_done()
+    events = hass.states.get("sensor.erik_caffeine_level").attributes["events"]
+
+    await _remove_by_id(hass, events[0]["id"], ["sensor.erik_caffeine_level"])
+    await hass.async_block_till_done()
+
+    assert float(hass.states.get("sensor.erik_caffeine_level").state) == 0.0
+
+
+async def test_remove_consumption_unknown_id_rejected(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    """An ID no targeted profile has raises instead of silently doing nothing."""
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await _log(hass, {"mg": 80.0})
+    with pytest.raises(ServiceValidationError) as err:
+        await _remove_by_id(hass, "does-not-exist", ["sensor.erik_caffeine_level"])
+    assert err.value.translation_key == "event_not_found"
+    await hass.async_block_till_done()
+
+    assert float(hass.states.get("sensor.erik_caffeine_level").state) > 79.0
+
+
+async def test_remove_consumption_multi_target_only_owner_needs_id(
+    hass: HomeAssistant, entry: MockConfigEntry, mock_store
+) -> None:
+    """Targeting two profiles succeeds when only one of them owns the event."""
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        title="Anna",
+        data={
+            CONF_PERSON_NAME: "Anna",
+            CONF_HALF_LIFE_HOURS: 5.0,
+            CONF_SLEEP_SAFE_MG: 50.0,
+        },
+        entry_id="test_entry_anna",
+    )
+    for e in (entry, other):
+        e.add_to_hass(hass)
+        await hass.config_entries.async_setup(e.entry_id)
+    await hass.async_block_till_done()
+
+    await _log(hass, {"mg": 80.0})
+    await hass.services.async_call(
+        DOMAIN,
+        "log_consumption",
+        {"mg": 60.0},
+        target={"entity_id": "sensor.anna_caffeine_level"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    events = hass.states.get("sensor.erik_caffeine_level").attributes["events"]
+
+    await _remove_by_id(
+        hass,
+        events[0]["id"],
+        ["sensor.erik_caffeine_level", "sensor.anna_caffeine_level"],
+    )
+    await hass.async_block_till_done()
+
+    assert float(hass.states.get("sensor.erik_caffeine_level").state) == 0.0
+    assert float(hass.states.get("sensor.anna_caffeine_level").state) > 59.0

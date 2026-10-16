@@ -316,10 +316,14 @@ class CaffeineCoordinator(DataUpdateCoordinator[CaffeineData]):
         return event.id
 
     async def async_remove_last(self) -> bool:
-        """Remove the most recent event. Returns True if an event was removed."""
+        """Remove the most recently logged event. Returns True if an event was removed.
+
+        Uses log order, not timestamp order, so undo after backfilling an earlier
+        drink removes that drink rather than the latest one by time.
+        """
         if not self._events:
             return False
-        self._events.sort(key=lambda e: e.timestamp)
+        # _events is only ever appended to or filtered, so it stays in log order.
         removed = self._events.pop()
         await self._async_save()
         await self.async_refresh()
