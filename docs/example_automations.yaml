@@ -1,0 +1,50 @@
+# Caffeine Tracker — example automations
+#
+# Paste an automation via Settings -> Automations & Scenes -> + Create
+# Automation -> ⋮ -> Edit in YAML, or add these to your automations.yaml.
+#
+# Replace "erik" in entity IDs with your own profile name, YOUR_DEVICE_ID with
+# the person's device ID, and notify.mobile_app_your_phone with your own
+# notify action. Uses the automation syntax from Home Assistant 2024.10 and newer.
+
+# Warn right after logging a drink that pushes "sleep safe" past bedtime.
+- alias: Caffeine bedtime warning
+  description: Notify when a new drink keeps you awake past 23:00.
+  mode: single
+  triggers:
+    - trigger: state
+      entity_id: sensor.erik_sleep_safe_at
+  conditions:
+    # A drink moved "sleep safe" past 23:00. The 10-minute margin skips the
+    # small minute-by-minute updates, and removals only move it earlier.
+    - condition: template
+      value_template: >-
+        {% set new = as_datetime(trigger.to_state.state) %}
+        {% set old = as_datetime(trigger.from_state.state) if trigger.from_state else none %}
+        {{ new is not none and old is not none
+           and new > today_at('23:00')
+           and new - old > timedelta(minutes=10) }}
+  actions:
+    - action: notify.mobile_app_your_phone
+      data:
+        title: Caffeine
+        message: >-
+          You'll be sleep-safe at
+          {{ as_local(as_datetime(trigger.to_state.state)).strftime('%H:%M') }}
+          ({{ states('sensor.erik_caffeine_level') | float(0) | round(0) }} mg now).
+
+# Log an espresso by scanning an NFC tag stuck to the coffee machine.
+# Create the tag in Settings -> Tags, then copy its ID here.
+- alias: Caffeine NFC espresso
+  description: Log an espresso when the coffee machine tag is scanned.
+  mode: queued
+  triggers:
+    - trigger: tag
+      tag_id: YOUR_TAG_ID
+  actions:
+    - action: caffeine_tracker.log_consumption
+      target:
+        device_id: YOUR_DEVICE_ID
+      data:
+        mg: 80
+        label: Espresso
