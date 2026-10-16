@@ -71,10 +71,10 @@ data:
 |-------|-------------|---------|
 | `mg` | Amount of caffeine in mg. | (Required) |
 | `label` | Optional name (e.g., "Cold Brew"). | "custom" |
-| `timestamp` | Optional ISO 8601 time for past logging. | "now" |
+| `timestamp` | Optional ISO 8601 time for past logging. Invalid or future times are rejected. | "now" |
 
 Other services:
-- `caffeine_tracker.remove_last_consumption`: Undo the most recent entry.
+- `caffeine_tracker.remove_last_consumption`: Undo the most recently logged entry (even if it was backdated).
 - `caffeine_tracker.remove_consumption`: Remove a specific event by its ID (found in sensor attributes).
 - `caffeine_tracker.clear_today`: Wipe all events logged today.
 

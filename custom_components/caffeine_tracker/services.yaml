@@ -36,7 +36,7 @@ log_consumption:
 
 remove_last_consumption:
   name: Remove Last Consumption
-  description: Undo the most recent caffeine event for this person.
+  description: Undo the most recently logged caffeine event for this person.
   target:
     entity:
       integration: caffeine_tracker

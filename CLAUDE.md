@@ -2,7 +2,7 @@
 
 ## Build & Test
 - **Install**: `task install` (uses `uv`)
-- **Test**: `task test` (runs all 43 tests)
+- **Test**: `task test` (runs all 49 tests)
 - **Lint/Format**: `task lint`, `task format`
 - **Deploy**: `task deploy` (rsync to HA)
 - **Reload**: `task reload` (HA API call)

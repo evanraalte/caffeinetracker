@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any
@@ -10,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, service
 import homeassistant.util.dt as dt_util
 
@@ -55,6 +57,30 @@ _extract_config_entry_ids: Callable[..., Awaitable[set[str]]] = (
 )
 _EXTRACT_TAKES_HASS = "hass" in inspect.signature(_extract_config_entry_ids).parameters
 
+# Allow for small clock differences between HA and whatever sends the timestamp.
+_FUTURE_TOLERANCE = timedelta(minutes=1)
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    """Parse an optional ISO 8601 timestamp into UTC; None means "now"."""
+    if not value:
+        return None
+    try:
+        ts = dt_util.parse_datetime(value)
+    except ValueError:  # well-formed but impossible, e.g. month 13
+        ts = None
+    if ts is None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="invalid_timestamp"
+        )
+    # Naive timestamps are taken as HA's local time zone.
+    ts = dt_util.as_utc(ts)
+    if ts > dt_util.utcnow() + _FUTURE_TOLERANCE:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="future_timestamp"
+        )
+    return ts
+
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Caffeine Tracker integration."""
@@ -66,6 +92,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         extract_args: tuple[Any, ...] = (hass, call) if _EXTRACT_TAKES_HASS else (call,)
         entry_ids = await _extract_config_entry_ids(*extract_args)
 
+        # Validate before touching any profile so a bad call logs nothing at all.
+        ts = None
+        if call.service == SERVICE_LOG_CONSUMPTION:
+            ts = _parse_timestamp(call.data.get(ATTR_TIMESTAMP))
+
         for entry_id in entry_ids:
             if entry_id not in hass.data.get(DOMAIN, {}):
                 continue
@@ -74,13 +105,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             if call.service == SERVICE_LOG_CONSUMPTION:
                 mg = call.data[ATTR_MG]
                 label = call.data.get(ATTR_LABEL, "custom")
-                timestamp_str = call.data.get(ATTR_TIMESTAMP)
-                ts = None
-                if timestamp_str:
-                    ts = dt_util.parse_datetime(timestamp_str)
-                    if ts and ts.tzinfo is None:
-                        ts = dt_util.as_utc(ts)
-
                 await coordinator.async_log_consumption(
                     mg=mg, label=label, timestamp=ts
                 )
