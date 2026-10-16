@@ -5,10 +5,10 @@
     "@evanraalte"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/evanraalte/hacs-caffeinetracker",
+  "documentation": "https://github.com/evanraalte/caffeinetracker",
   "integration_type": "service",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/evanraalte/hacs-caffeinetracker/issues",
+  "issue_tracker": "https://github.com/evanraalte/caffeinetracker/issues",
   "requirements": [],
   "version": "0.2.4"
 }

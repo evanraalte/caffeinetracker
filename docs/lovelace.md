@@ -1,20 +1,124 @@
 # Lovelace Dashboard
 
-Example cards for a caffeine tracking dashboard.
+Example cards for a caffeine tracking dashboard. There are two versions:
 
-## Prerequisites (install via HACS Frontend)
+- [Built-in cards](#built-in-cards): works on any Home Assistant install, nothing extra needed.
+- [Mushroom + mini-graph](#mushroom--mini-graph): nicer looking, needs a few cards from HACS.
+
+## Before you start
+
+The examples use a profile named **Erik**. Home Assistant names the entities
+after the profile, so replace `erik` with your own profile name:
+
+| Entity | What it shows |
+|--------|---------------|
+| `sensor.erik_caffeine_level` | Current mg in your body |
+| `sensor.erik_caffeine_consumed_today` | Total mg since midnight |
+| `sensor.erik_consumptions_today` | Number of drinks since midnight |
+| `sensor.erik_sleep_safe_at` | When you drop below your sleep-safe threshold |
+| `sensor.erik_estimated_peak_level` | Peak level still to come (only with the absorption model enabled) |
+
+The log buttons target the person's **device**, which logs exactly once per
+profile. Find the device ID under **Settings → Devices & Services → Caffeine
+Tracker**: open the person's device and copy the last part of the URL. Replace
+`YOUR_DEVICE_ID` with it.
+
+---
+
+## Built-in cards
+
+A level tile, a 12-hour history graph, today's totals and log buttons. The Undo
+button asks for confirmation first.
+
+<img src="dashboard-builtin.png" alt="Built-in cards: level tile, history graph, today's totals and log buttons" width="420">
+
+```yaml
+type: vertical-stack
+cards:
+  - type: tile
+    entity: sensor.erik_caffeine_level
+    name: Caffeine level
+    icon: mdi:coffee
+
+  - type: history-graph
+    hours_to_show: 12
+    entities:
+      - entity: sensor.erik_caffeine_level
+        name: Erik
+
+  - type: glance
+    entities:
+      - entity: sensor.erik_caffeine_consumed_today
+        name: Today
+      - entity: sensor.erik_consumptions_today
+        name: Drinks
+      - entity: sensor.erik_sleep_safe_at
+        name: Sleep safe
+
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: button
+        name: Espresso
+        icon: mdi:coffee
+        tap_action:
+          action: perform-action
+          perform_action: caffeine_tracker.log_consumption
+          target:
+            device_id: YOUR_DEVICE_ID
+          data:
+            mg: 80
+            label: Espresso
+
+      - type: button
+        name: Filter coffee
+        icon: mdi:coffee-maker
+        tap_action:
+          action: perform-action
+          perform_action: caffeine_tracker.log_consumption
+          target:
+            device_id: YOUR_DEVICE_ID
+          data:
+            mg: 95
+            label: Filter coffee
+
+      - type: button
+        name: Undo
+        icon: mdi:undo
+        tap_action:
+          action: perform-action
+          perform_action: caffeine_tracker.remove_last_consumption
+          target:
+            device_id: YOUR_DEVICE_ID
+          confirmation:
+            text: Remove the last drink?
+```
+
+For multiple household members, add more entities to the history graph:
+
+```yaml
+entities:
+  - entity: sensor.erik_caffeine_level
+    name: Erik
+  - entity: sensor.alex_caffeine_level
+    name: Alex
+```
+
+---
+
+## Mushroom + mini-graph
+
+Install these from **HACS → Frontend** first:
 
 | Card | What it's used for |
 |------|-------------------|
 | [mini-graph-card](https://github.com/kalkih/mini-graph-card) | Caffeine decay graph |
-| [Mushroom](https://github.com/piitaya/lovelace-mushroom) | Status chips + log buttons |
-| [card-mod](https://github.com/thomasloven/lovelace-card-mod) | Custom styling (optional) |
+| [Mushroom](https://github.com/piitaya/lovelace-mushroom) | Status chips and log buttons |
 
----
+### Caffeine graph
 
-## Caffeine graph
-
-Shows the decay curve over the last 12 hours. Line color shifts from green
+The decay curve over the last 12 hours. The line shifts from green
 (sleep-safe) through amber and orange to red as caffeine builds up.
 
 ```yaml
@@ -26,10 +130,8 @@ entities:
     name: Erik
 show:
   fill: fade
-  icon: true
   legend: false
   extrema: true
-  labels: true
   points: false
 color_thresholds:
   - value: 0
@@ -42,50 +144,28 @@ color_thresholds:
     color: "#F44336"
 lower_bound: 0
 line_width: 3
-font_size: 75
 height: 120
 points_per_hour: 12
 hours_to_show: 12
-animate: true
-card_mod:
-  style: |
-    ha-card {
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(12px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      transition: all 0.3s ease;
-    }
-    ha-card:hover {
-      transform: scale(1.01);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.6);
-    }
 ```
 
-For multiple household members, add more entities:
-```yaml
-entities:
-  - entity: sensor.erik_caffeine_level
-    name: Erik
-  - entity: sensor.girlfriend_caffeine_level
-    name: Girlfriend
-```
+### Status chips
 
----
-
-## Status chips
-
-A compact row showing current level, today's total, and sleep-safe time.
+Current level (colored by how high it is), today's total, drink count and
+sleep-safe time.
 
 ```yaml
 type: custom:mushroom-chips-card
 chips:
-  - type: entity
+  - type: template
     entity: sensor.erik_caffeine_level
     icon: mdi:coffee
     icon_color: >-
       {% set v = states('sensor.erik_caffeine_level') | float(0) %}
       {% if v < 50 %}green{% elif v < 150 %}orange{% else %}red{% endif %}
+    content: "{{ states('sensor.erik_caffeine_level') | float(0) | round(0) }} mg"
+    tap_action:
+      action: more-info
   - type: entity
     entity: sensor.erik_caffeine_consumed_today
     icon: mdi:coffee-maker
@@ -97,21 +177,21 @@ chips:
   - type: entity
     entity: sensor.erik_sleep_safe_at
     icon: mdi:sleep
-    icon_color: blue
+    icon_color: indigo
+```
+
+With the absorption model enabled, you can add the peak chip too:
+
+```yaml
   - type: entity
     entity: sensor.erik_estimated_peak_level
     icon: mdi:trending-up
     icon_color: purple
 ```
 
----
+### Quick-log buttons
 
-## Quick-log buttons
-
-A 3-column grid of mushroom template cards. Tap to log, long-press Undo to
-avoid accidental clears.
-
-Targeting the **device** (e.g. `d380...`) or the **caffeine level sensor** works equally well with the new domain-service implementation.
+A 3-column grid. Tap a drink to log it; Undo asks for confirmation first.
 
 ```yaml
 type: grid
@@ -124,12 +204,11 @@ cards:
     icon: mdi:coffee
     icon_color: brown
     tap_action:
-      action: call-service
-      service: caffeine_tracker.log_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.log_consumption
       target:
-        # Preferred: target the device
-        device_id: d380a0425d60622775a99c2954309348
-      service_data:
+        device_id: YOUR_DEVICE_ID
+      data:
         mg: 80
         label: Espresso
 
@@ -139,11 +218,11 @@ cards:
     icon: mdi:coffee-maker
     icon_color: brown
     tap_action:
-      action: call-service
-      service: caffeine_tracker.log_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.log_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
-      service_data:
+        device_id: YOUR_DEVICE_ID
+      data:
         mg: 95
         label: Filter coffee
 
@@ -153,11 +232,11 @@ cards:
     icon: mdi:coffee
     icon_color: amber
     tap_action:
-      action: call-service
-      service: caffeine_tracker.log_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.log_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
-      service_data:
+        device_id: YOUR_DEVICE_ID
+      data:
         mg: 80
         label: Cappuccino
 
@@ -167,11 +246,11 @@ cards:
     icon: mdi:cup
     icon_color: deep-orange
     tap_action:
-      action: call-service
-      service: caffeine_tracker.log_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.log_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
-      service_data:
+        device_id: YOUR_DEVICE_ID
+      data:
         mg: 155
         label: Cold brew
 
@@ -181,32 +260,33 @@ cards:
     icon: mdi:lightning-bolt
     icon_color: yellow
     tap_action:
-      action: call-service
-      service: caffeine_tracker.log_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.log_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
-      service_data:
+        device_id: YOUR_DEVICE_ID
+      data:
         mg: 160
         label: Energy drink
 
   - type: custom:mushroom-template-card
     primary: Undo
-    secondary: Last entry
+    secondary: Last drink
     icon: mdi:undo
     icon_color: red
     tap_action:
-      action: call-service
-      service: caffeine_tracker.remove_last_consumption
+      action: perform-action
+      perform_action: caffeine_tracker.remove_last_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
+        device_id: YOUR_DEVICE_ID
+      confirmation:
+        text: Remove the last drink?
 ```
 
----
+### Full stack
 
-## Full dashboard stack
+The graph, chips and buttons above in one card you can drop onto any view.
 
-Combines the graph, status chips, and log buttons into a single card you can
-drop onto any view.
+<img src="dashboard-mushroom.png" alt="Mushroom and mini-graph dashboard: decay graph, status chips and log buttons" width="420">
 
 ```yaml
 type: vertical-stack
@@ -219,10 +299,8 @@ cards:
         name: Erik
     show:
       fill: fade
-      icon: true
       legend: false
       extrema: true
-      labels: true
       points: false
     color_thresholds:
       - value: 0
@@ -235,28 +313,21 @@ cards:
         color: "#F44336"
     lower_bound: 0
     line_width: 3
-    font_size: 75
     height: 120
     points_per_hour: 12
     hours_to_show: 12
-    animate: true
-    card_mod:
-      style: |
-        ha-card {
-          border-radius: 20px;
-          background: rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(12px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
 
   - type: custom:mushroom-chips-card
     chips:
-      - type: entity
+      - type: template
         entity: sensor.erik_caffeine_level
         icon: mdi:coffee
         icon_color: >-
           {% set v = states('sensor.erik_caffeine_level') | float(0) %}
           {% if v < 50 %}green{% elif v < 150 %}orange{% else %}red{% endif %}
+        content: "{{ states('sensor.erik_caffeine_level') | float(0) | round(0) }} mg"
+        tap_action:
+          action: more-info
       - type: entity
         entity: sensor.erik_caffeine_consumed_today
         icon: mdi:coffee-maker
@@ -268,11 +339,7 @@ cards:
       - type: entity
         entity: sensor.erik_sleep_safe_at
         icon: mdi:sleep
-        icon_color: blue
-      - type: entity
-        entity: sensor.erik_estimated_peak_level
-        icon: mdi:trending-up
-        icon_color: purple
+        icon_color: indigo
 
   - type: grid
     columns: 3
@@ -284,11 +351,11 @@ cards:
         icon: mdi:coffee
         icon_color: brown
         tap_action:
-          action: call-service
-          service: caffeine_tracker.log_consumption
+          action: perform-action
+          perform_action: caffeine_tracker.log_consumption
           target:
-            device_id: d380a0425d60622775a99c2954309348
-          service_data:
+            device_id: YOUR_DEVICE_ID
+          data:
             mg: 80
             label: Espresso
 
@@ -298,22 +365,24 @@ cards:
         icon: mdi:coffee-maker
         icon_color: brown
         tap_action:
-          action: call-service
-          service: caffeine_tracker.log_consumption
+          action: perform-action
+          perform_action: caffeine_tracker.log_consumption
           target:
-            entity_id: sensor.erik_caffeine_level
-          service_data:
+            device_id: YOUR_DEVICE_ID
+          data:
             mg: 95
             label: Filter coffee
 
       - type: custom:mushroom-template-card
         primary: Undo
-        secondary: Last entry
+        secondary: Last drink
         icon: mdi:undo
         icon_color: red
         tap_action:
-          action: call-service
-          service: caffeine_tracker.remove_last_consumption
+          action: perform-action
+          perform_action: caffeine_tracker.remove_last_consumption
           target:
-            entity_id: sensor.erik_caffeine_level
+            device_id: YOUR_DEVICE_ID
+          confirmation:
+            text: Remove the last drink?
 ```
