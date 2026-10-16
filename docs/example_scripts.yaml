@@ -1,85 +1,94 @@
-# Caffeine Tracker — example HA scripts
+# Caffeine Tracker — example scripts
 #
-# Add to configuration.yaml:
-#   script: !include scripts.yaml
-# or paste individual scripts via:
-#   Settings -> Automations & Scenes -> Scripts -> + Add Script -> Create from YAML
+# Paste a script via Settings -> Automations & Scenes -> Scripts -> + Add Script
+# -> ⋮ -> Edit in YAML, or add these to your scripts.yaml.
 #
-# Replace "erik" with your own sensor name if you used a different profile name.
-# Better: Target the DEVICE_ID to ensure it works even if you rename sensors.
-# The mg values below are typical amounts — adjust to match your actual drinks.
+# Find your device ID: Settings -> Devices & Services -> Caffeine Tracker ->
+# open the person's device; the ID is the last part of the URL.
+# Replace YOUR_DEVICE_ID below with it.
 
-caffeine_espresso_erik:
-  alias: "Espresso - Erik"
+# One reusable script for every drink. Call it from buttons, voice assistants
+# or automations, and pick the person, amount and drink each time.
+log_caffeine:
+  alias: Log caffeine
   icon: mdi:coffee
+  mode: queued
+  fields:
+    person:
+      name: Person
+      required: true
+      selector:
+        device:
+          integration: caffeine_tracker
+    mg:
+      name: Amount
+      required: true
+      default: 80
+      selector:
+        number:
+          min: 1
+          max: 500
+          step: 1
+          unit_of_measurement: mg
+    label:
+      name: Drink
+      default: Espresso
+      selector:
+        text:
   sequence:
     - action: caffeine_tracker.log_consumption
       target:
-        # Preferred: Target the device to ensure the profile is updated exactly once
-        device_id: d380a0425d60622775a99c2954309348
+        device_id: "{{ person }}"
       data:
+        mg: "{{ mg }}"
+        label: "{{ label | default('custom') }}"
+
+# One-tap shortcuts that reuse the script above. Typical caffeine amounts;
+# adjust to match your own drinks.
+caffeine_espresso:
+  alias: Espresso
+  icon: mdi:coffee
+  sequence:
+    - action: script.log_caffeine
+      data:
+        person: YOUR_DEVICE_ID
         mg: 80
         label: Espresso
 
-caffeine_drip_coffee_erik:
-  alias: "Filter coffee - Erik"
+caffeine_filter_coffee:
+  alias: Filter coffee
   icon: mdi:coffee-maker
   sequence:
-    - action: caffeine_tracker.log_consumption
-      target:
-        entity_id: sensor.erik_caffeine_level
+    - action: script.log_caffeine
       data:
+        person: YOUR_DEVICE_ID
         mg: 95
         label: Filter coffee
 
-caffeine_cappuccino_erik:
-  alias: "Cappuccino - Erik"
-  icon: mdi:coffee
-  sequence:
-    - action: caffeine_tracker.log_consumption
-      target:
-        entity_id: sensor.erik_caffeine_level
-      data:
-        mg: 80
-        label: Cappuccino
-
-caffeine_latte_erik:
-  alias: "Latte - Erik"
-  icon: mdi:coffee
-  sequence:
-    - action: caffeine_tracker.log_consumption
-      target:
-        entity_id: sensor.erik_caffeine_level
-      data:
-        mg: 75
-        label: Latte
-
-caffeine_cold_brew_erik:
-  alias: "Cold brew - Erik"
+caffeine_cold_brew:
+  alias: Cold brew
   icon: mdi:cup
   sequence:
-    - action: caffeine_tracker.log_consumption
-      target:
-        entity_id: sensor.erik_caffeine_level
+    - action: script.log_caffeine
       data:
+        person: YOUR_DEVICE_ID
         mg: 155
         label: Cold brew
 
-caffeine_energy_drink_erik:
-  alias: "Energy drink - Erik"
+caffeine_energy_drink:
+  alias: Energy drink
   icon: mdi:lightning-bolt
   sequence:
-    - action: caffeine_tracker.log_consumption
-      target:
-        entity_id: sensor.erik_caffeine_level
+    - action: script.log_caffeine
       data:
+        person: YOUR_DEVICE_ID
         mg: 160
         label: Energy drink
 
-caffeine_undo_erik:
-  alias: "Undo last - Erik"
+caffeine_undo:
+  alias: Undo last caffeine
   icon: mdi:undo
   sequence:
     - action: caffeine_tracker.remove_last_consumption
       target:
-        entity_id: sensor.erik_caffeine_level
+        device_id: YOUR_DEVICE_ID

@@ -1,12 +1,12 @@
 # Caffeine Tracker for Home Assistant
 
-[![GitHub Release](https://img.shields.io/github/release/evanraalte/hacs-caffeinetracker.svg?style=flat-square)](https://github.com/evanraalte/hacs-caffeinetracker/releases)
-[![License](https://img.shields.io/github/license/evanraalte/hacs-caffeinetracker.svg?style=flat-square)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/release/evanraalte/caffeinetracker.svg?style=flat-square)](https://github.com/evanraalte/caffeinetracker/releases)
+[![License](https://img.shields.io/github/license/evanraalte/caffeinetracker.svg?style=flat-square)](LICENSE)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A Home Assistant integration that tracks your caffeine levels using a science-based exponential decay model. It calculates current mg in your body, total daily intake, and estimates when it's safe to sleep.
 
-![Caffeine Dashboard Example](docs/dashboard.png)
+<img src="docs/dashboard-mushroom.png" alt="Caffeine dashboard with a decay graph, status chips and log buttons" width="420">
 
 ## Features
 
@@ -23,7 +23,7 @@ A Home Assistant integration that tracks your caffeine levels using a science-ba
 
 1. Open **HACS** in Home Assistant.
 2. Click the three dots in the top right and select **Custom repositories**.
-3. Add `https://github.com/evanraalte/hacs-caffeinetracker` as an **Integration**.
+3. Add `https://github.com/evanraalte/caffeinetracker` as an **Integration**.
 4. Click **Install**.
 5. Restart Home Assistant.
 
@@ -38,9 +38,11 @@ A Home Assistant integration that tracks your caffeine levels using a science-ba
 1. Go to **Settings -> Devices & Services**.
 2. Click **+ Add Integration** and search for **Caffeine Tracker**.
 3. Enter your name and caffeine metabolism settings:
-   - **Half-life**: Time (hours) for caffeine to halve. Default is 5h (typical range 3–7h).
-   - **Sleep-safe threshold**: mg level below which you can sleep well. Default is 50mg.
-   - **Absorption Model**: If enabled, caffeine enters the bloodstream over ~45 minutes instead of instantly.
+   - **Half-life**: Time (hours) for caffeine to halve. Default is 5h; you can set 3–10h (most adults are 3–7h).
+   - **Sleep-safe threshold**: mg level below which you can sleep well. Default is 50mg, minimum 1mg.
+   - **Absorption Model**: If enabled, caffeine enters the bloodstream gradually (peaking ~45 minutes after a drink) instead of instantly.
+
+You can change these later under the integration's **Configure** button.
 
 ## Sensors
 
@@ -51,44 +53,48 @@ Each person profile creates the following sensors:
 | `Caffeine Level` | Current estimated mg in your body. |
 | `Caffeine Consumed Today` | Total mg logged since local midnight. |
 | `Consumptions Today` | Number of intake events logged since local midnight. |
-| `Sleep Safe At` | Timestamp when you'll cross your sleep threshold. |
+| `Sleep Safe At` | Timestamp when you'll drop below your sleep threshold. Shows the current time once you're already below it. |
 | `Estimated Peak Level` | (Only if absorption enabled) The highest level you'll reach from currently absorbed caffeine. |
 
 ## Service: Log Consumption
 
-Target the **Device** (person profile) or the **Caffeine Level** sensor to log intake.
+Target the person's **device** to log intake. Targeting any of its sensors works too; each call logs once per profile.
 
 ```yaml
 action: caffeine_tracker.log_consumption
 target:
-  device_id: YOUR_DEVICE_ID  # Targeting the device logs to the profile exactly once
+  device_id: YOUR_DEVICE_ID
 data:
   mg: 80
   label: Espresso
 ```
 
+Find the device ID under **Settings → Devices & Services → Caffeine Tracker**: open the person's device and copy the last part of the URL.
+
 | Field | Description | Default |
 |-------|-------------|---------|
 | `mg` | Amount of caffeine in mg. | (Required) |
 | `label` | Optional name (e.g., "Cold Brew"). | "custom" |
-| `timestamp` | Optional ISO 8601 time for past logging. Invalid or future times are rejected. | "now" |
+| `timestamp` | Optional ISO 8601 time for past logging, e.g. `2026-10-16T08:30:00`. Without a timezone, your HA timezone is used. Invalid or future times are rejected. | now |
 
 Other services:
 - `caffeine_tracker.remove_last_consumption`: Undo the most recently logged entry (even if it was backdated).
 - `caffeine_tracker.remove_consumption`: Remove a specific event by its ID (found in sensor attributes).
 - `caffeine_tracker.clear_today`: Wipe all events logged today.
 
-## Dashboard Examples
+## Examples
 
-Check the [Lovelace Guide](docs/lovelace.md) for mini-graph and Mushroom card examples.
+- [Dashboard cards](docs/lovelace.md): a built-in cards version and a Mushroom + mini-graph version (the screenshot above).
+- [Scripts](docs/example_scripts.yaml): one reusable "Log caffeine" script plus one-tap drink shortcuts.
+- [Automations](docs/example_automations.yaml): a bedtime warning when a drink keeps you up past 23:00, and logging by NFC tag.
 
 ## Development
 
 This project uses `uv` for dependency management and `Taskfile` for automation.
 
 ```bash
-git clone https://github.com/evanraalte/hacs-caffeinetracker
-cd hacs-caffeinetracker
+git clone https://github.com/evanraalte/caffeinetracker
+cd caffeinetracker
 task install
 task test
 ```
