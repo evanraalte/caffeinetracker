@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/release/evanraalte/caffeinetracker.svg?style=flat-square)](https://github.com/evanraalte/caffeinetracker/releases)
 [![License](https://img.shields.io/github/license/evanraalte/caffeinetracker.svg?style=flat-square)](LICENSE)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square)](https://github.com/hacs/integration)
 
 A Home Assistant integration that tracks your caffeine levels using a science-based exponential decay model. It calculates current mg in your body, total daily intake, and estimates when it's safe to sleep.
 
@@ -22,10 +22,9 @@ A Home Assistant integration that tracks your caffeine levels using a science-ba
 ### Method 1: HACS (Recommended)
 
 1. Open **HACS** in Home Assistant.
-2. Click the three dots in the top right and select **Custom repositories**.
-3. Add `https://github.com/evanraalte/caffeinetracker` as an **Integration**.
-4. Click **Install**.
-5. Restart Home Assistant.
+2. Search for **Caffeine Tracker**.
+3. Click **Download**.
+4. Restart Home Assistant.
 
 ### Method 2: Manual
 
