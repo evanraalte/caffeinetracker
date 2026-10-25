@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.2.7] - 2026-10-25
+
+### Documentation
+
+- Update install instructions now that HACS default listing is approved
+
 ## [0.2.6] - 2026-10-25
 
 ### Dependencies
