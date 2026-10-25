@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [0.2.6] - 2026-10-25
+
+### Dependencies
+
+- **deps**: Update home-assistant/actions digest to cd6f363 (#67)
+- **deps**: Lock file maintenance (#68)
+- **deps**: Update astral-sh/setup-uv action to v10.3.1 (#24)
+- **deps**: Update astral-sh/setup-uv action to v10.3.2 (#69)
+
 ## [0.2.5] - 2026-10-16
 
 ### Bug Fixes
